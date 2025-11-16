@@ -2,7 +2,13 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]     // TypeScriptにも @ を認識させる
-    }
+      "@/*": ["src/*"],     // TypeScriptにも @ を認識させる
+    },
+    "strict": true,
+    "moduleResolution": "bundler",
+    "types": []
+  },
+  "vueCompilerOptions": {
+    "globalTypesPath": "./.volar-types/global.d.ts"
   }
 }
