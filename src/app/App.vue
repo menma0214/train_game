@@ -7,17 +7,24 @@
     count.value++;
   } -->
   <div class="game" ref="gameRoot" @contextmenu.prevent>
-    <div class="sky"></div>
-    <div class="ground"></div>
-    <div class="track"></div>
+    <!-- <div class="sky" :style="skyStyle"></div> -->
+    <div class="grounds">
+      <div v-for="g in groundSegs" :key="g.id" class="ground-seg" :style="{left: (g.x - cameraX * groundPx) + 'px', backgroundImage: `url(${(g.idx & 1) ? groundTokyo : groundChiba})`}">
+      </div>
+    </div>
+    <div class="track">
+      <div v-for="seg in trackSegs" :key="seg.id" class="track-seg" :style="{left: (seg.x - cameraX) + 'px'}"></div>
+    </div>
 
     <!-- 駅 -->
     <!-- left:はcssプロパティ -->
-    <div v-for="(st, i) in stations" :key="i" class="station" :style="{ left: (st.x - cameraX) + 'px' }" @pointerdown.prevent="onStationTap(i)" :data-active="st.active">駅</div>
+    <div v-for="(st, i) in stations" :key="st.x" class="station" :style="{ left: (st.x - cameraX) + 'px' }" @pointerdown.prevent="onStationTap(i)" :data-active="st.active">駅</div>
 
     <!-- 電車 -->
-    <div class="train" :style="{ transform: `translateX(${trainX - cameraX}px)` }" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp">
-      <div class="car">🚃</div>
+    <div class="train" :style="{ left: anchorPx + 'px', transform: 'translateY(-50%)' }" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp">
+      <div class="car">
+        <img class="train-image" :src="trainImg" alt="電車">
+      </div>
       <div class="caption" v-if="arrivedFlash">到着！</div>
     </div>
 
@@ -30,7 +37,11 @@
 </template>
 
 <script lang="ts">
-import { onMounted, onUnmounted, reactive, ref, toRefs } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, toRefs, computed} from 'vue'
+import trainImg from '@/assets/train.png'
+// import skyImg from '@/assets/sky.png'
+import groundTokyo from '@/assets/ground2.png'
+import groundChiba from '@/assets/ground3.png'
 
 // ====== 操作モード定義（mixed 固定）======
 const CTRL_MODE = 'mixed' as 'flick' | 'hold' | 'mixed'
@@ -38,9 +49,18 @@ const CTRL_MODE = 'mixed' as 'flick' | 'hold' | 'mixed'
 const FLICK_PX   = 30   // フリック最小移動量(px)
 const HOLD_MS    = 120  // これ未満はフリック扱い、以上は長押し加速優先
 const HOLD_ACCEL = 0.20 // 長押し中のフレーム毎加速量
-const STATION_INTERVAL = 600;
+const STATION_INTERVAL = 5000;
 const STATION_COUNT = 8;
 const FIRST_STATION_X = 400;
+const ANCHOR_RATIO = 0.1; //電車の配置
+const TRACK_SEG_W = 240;
+const TRACK_BUFFER = 600;
+// const SKY_TITLE_W = 512;
+const GROUND_TILE_W = 813; //背景画像(ground.png)の[実ピクセル横幅]に必ず合わせる
+const GROUND_BUFFER = 600; //カメラ左右の余白
+const GROUND_PX = 0.30;// パララックス係数(描画と再配置で共通使用)
+const GROUND_OVERLAP = 0;   // 片側の重なり(px)
+const GROUND_STEP = GROUND_TILE_W - GROUND_OVERLAP; // 配置ピッチ
 
 export default {
   setup() {
@@ -54,13 +74,42 @@ export default {
       maxSpeed: 20,
       arrivedFlash: false,
       stations: [] as { x: number; active: boolean} [],
+      trackSegs: [] as { id:number; x:number } [],
+      groundSegs: [] as { id:number; x:number; idx:number } [],
       // 入力状態
       isHolding: false,
       lastDx: 0,
       pressTs: 0
     })
+    const onResize = () => {
+      viewportW.value = gameRoot.value?.clientWidth || window.innerWidth
+      initTrackSegs(); //幅が変わったら線路も再配置
+      initGroundSegs();
+    }
 
     const gameRoot = ref<HTMLElement | null>(null)
+    const viewportW = ref(0)
+    const anchorPx = computed(() => Math.max(0, Math.round(viewportW.value * ANCHOR_RATIO)))
+
+    const segCount = computed(() => {
+      const need = Math.ceil((viewportW.value + TRACK_BUFFER * 2) / TRACK_SEG_W) + 2
+      return Math.max(need, 8);
+    })
+
+    const groundSegCount = computed(() => {
+      const need = Math.ceil((viewportW.value + GROUND_BUFFER * 2) / GROUND_TILE_W) + 4;
+      return Math.max(need, 8);
+    })
+
+    // const skyStyle = computed(() => {
+    //   const raw = -state.cameraX * 0.10
+    //   const offset = ((raw % SKY_TITLE_W) + SKY_TITLE_W) % SKY_TITLE_W
+    //   return {
+    //     backgroundImage: `url(${skyImg})`,
+    //     backgroundRepeat: `repeat-x`,
+    //     backgroundPosition: `${offset}px 0`
+    //   } as const
+    // })
 
     // 入力（ポインタ）
     let pointerDown = false
@@ -72,6 +121,52 @@ export default {
       for (let i = 0; i < STATION_COUNT; i++){
         const x =FIRST_STATION_X + i * STATION_INTERVAL;
         state.stations.push({x, active: true});
+      }
+    }
+
+    function initTrackSegs() {
+      state.trackSegs.length = 0;
+      // カメラ左バッファ位置にグリッドスナップして開始Xを決める
+      const start = Math.floor((state.cameraX - TRACK_BUFFER) / TRACK_SEG_W) * TRACK_SEG_W;
+      for (let i = 0; i < segCount.value; i++) {
+        state.trackSegs.push({ id: i, x: start + i * TRACK_SEG_W });
+      }
+    }
+
+    function initGroundSegs() {
+      state.groundSegs.length = 0;
+      const camP = state.cameraX * GROUND_PX; //parallax空間のカメラ配置
+      const start = Math.floor((camP - GROUND_BUFFER) / GROUND_STEP) * GROUND_STEP
+      const baseIndex = Math.floor(start / GROUND_TILE_W);
+      for (let i = 0; i < groundSegCount.value; i++) {
+        state.groundSegs.push({ id: i, x: start + i * GROUND_STEP, idx: baseIndex + i,});
+      }
+    }
+
+    function recycleGroundSegs() {
+      const camP = state.cameraX * GROUND_PX;
+      const leftEdge = camP - GROUND_BUFFER;
+      const rightEdge = leftEdge + groundSegCount.value * GROUND_STEP;
+      for (const seg of state.groundSegs) {
+        if (seg.x + GROUND_TILE_W < leftEdge) {
+          seg.x += groundSegCount.value * GROUND_STEP;
+          seg.idx += groundSegCount.value;
+        } else if (seg.x > rightEdge){
+          seg.x -= groundSegCount.value * GROUND_STEP;
+          seg.idx -= groundSegCount.value;
+        }
+      }
+    }
+
+    function recycleTrackSegs() {
+      const leftEdge = state.cameraX - TRACK_BUFFER;
+      const rightEdge = leftEdge + segCount.value * TRACK_SEG_W;
+      for (const seg of state.trackSegs) {
+        if (seg.x + TRACK_SEG_W < leftEdge) {
+          seg.x += segCount.value * TRACK_SEG_W;
+        } else if (seg.x > rightEdge) {
+          seg.x -= segCount.value * TRACK_SEG_W;
+        }
       }
     }
 
@@ -199,20 +294,32 @@ export default {
       if (state.speed > state.maxSpeed) state.speed = state.maxSpeed
 
       // カメラ追従
-      const desired = state.trainX - 200
+      const desired = state.trainX - anchorPx.value
       state.cameraX += (desired - state.cameraX) * 0.1
 
       checkArrival();
       recycleStations();
+      recycleGroundSegs();
+      recycleTrackSegs();
       raf = requestAnimationFrame(tick)
     }
 
     onMounted(() => {
       initStations();
-      if (gameRoot.value) gameRoot.value.style.touchAction = 'none'
+      if (gameRoot.value) {
+        gameRoot.value.style.touchAction = 'none'
+        // 初期幅の計測
+        viewportW.value = gameRoot.value.clientWidth || window.innerWidth
+      }
+      initTrackSegs();
+      initGroundSegs();
+      window.addEventListener('resize', onResize)
       raf = requestAnimationFrame(tick)
     })
-    onUnmounted(() => cancelAnimationFrame(raf))
+    onUnmounted(() => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onResize)
+    })
 
     return {
       ...toRefs(state),
@@ -220,7 +327,16 @@ export default {
       onPointerDown,
       onPointerMove,
       onPointerUp,
-      onStationTap
+      onStationTap,
+      anchorPx,
+      // skyStyle,
+      trainImg,
+      // skyImg,
+      groundTokyo,
+      groundChiba,
+      trackSegs: state.trackSegs,
+      groundSegs: state.groundSegs,
+      groundPx: GROUND_PX,
     }
   }
 }
@@ -235,40 +351,84 @@ export default {
   background: #cfe9ff;
   user-select: none;
   touch-action: none;
+  --track-bottom: 20%;
+  --track-height: 10px;
 }
 
-.sky {
+/* .sky {
   position: absolute;
   inset: 0;
-  background:
-  linear-gradient(#cfe9ff, #eaf6ff 60%);
   z-index: 0;
+  will-change: background-position;
+} */
+
+.grounds {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+.ground-seg {
+  position: absolute;
+  bottom: 0;
+  width: 813px;              /* ← GROUND_TILE_W と一致 */
+  height: 100%;
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  will-change: left;
+  overflow: hidden;
 }
 
-.ground {
+/* 疑似要素の共通ベース：幅=重なり量、高さ=全高 */
+.ground-seg::before,
+.ground-seg::after {
+  content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 35%;
-  background: #e5e5c7;
-  z-index: 1;
+  top: 0;
+  height: 100%;
+  width: 32px; /* ← GROUND_OVERLAP と一致させる */
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
+
+/* 左端だけに配置（left+width）*/
+.ground-seg::before { left: 0;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 100%);
+          mask-image: linear-gradient(to right, transparent 0, black 100%);
+}
+
+/* 右端だけに配置（right+width）*/
+.ground-seg::after  { right: 0;
+  -webkit-mask-image: linear-gradient(to left, transparent 0, black 100%);
+          mask-image: linear-gradient(to left, transparent 0, black 100%);
+}
+
+
 
 .track {
   position: absolute;
-  left: -2000px;
-  right: -2000px;
-  bottom: 20%;
-  height: 10px;
-  background: repeating-linear-gradient(to right, #444, #444 30px, #777 30px, #777 60px);
-  box-shadow: 0 4px 0 #333 inset;
+  inset: 0 0 0 0;
   z-index: 2;
+}
+
+.track-seg {
+  position: absolute;
+  bottom: var(--track-bottom);
+  width: 240px;
+  height: var(--track-height);
+  background: repeating-linear-gradient(
+    to right,
+    #444, #444 30px,
+    #777 30px, #777 60px
+  );
+  box-shadow: 0 4px 0 #333 inset;
 }
 
 .station {
   position: absolute;
-  bottom: 22%;
+  bottom: calc(var(--track-bottom) + var(--track-height) + 8px);
   width: 80px;
   height: 50px;
   line-height: 50px;
@@ -287,15 +447,15 @@ export default {
 .station:active { transform: translateX(-50%) scale(0.95); }
 
 .train {
-  position: absolute; bottom: 25%;
-  width: 100px; height: 60px;
-  transform: translateX(0);
-  transition: transform 0.05s linear;
-  z-index: 4; pointer-events: auto;
+  position: absolute;
+  bottom: calc(var(--track-bottom) - var(--track-height));
+  width: 15%;
+  height: 15%;
+  z-index: 4;
+  pointer-events: auto;
 }
 
 .car {
-  font-size: 48px;
   filter: drop-shadow(0 3px 0 rgba(0,0,0,0.2));
 }
 
@@ -328,4 +488,11 @@ export default {
   border-radius: 6px;
   z-index: 10;
 }
+
+.train-image {
+  display:block;
+  width: 154px;
+  height:auto;
+  pointer-events:none;
+  }
 </style>
