@@ -60,24 +60,25 @@
         @touchend.prevent="onRunUp">
         走る
       </button>
-
-      <button class="btn brake"
-        @pointerdown.prevent="onBrakeDown"
-        @pointerup.prevent="onBrakeUp"
-        @pointercancel.prevent="onBrakeUp"
-        @touchstart.prevent="onBrakeDown"
-        @touchend.prevent="onBrakeUp">
-        ブレーキ
-      </button>
-
-      <button class="btn jump"
-        @pointerdown.prevent="onJumpPress"
-        @pointerup.prevent="onJumpRelease"
-        @pointercancel.prevent="onJumpRelease"
-        @touchstart.prevent="onJumpPress"
-        @touchend.prevent="onJumpRelease">
-        ジャンプ
-      </button>
+      <div class="controls-right">
+        <button class="btn brake"
+          @pointerdown.prevent="onBrakeDown"
+          @pointerup.prevent="onBrakeUp"
+          @pointercancel.prevent="onBrakeUp"
+          @touchstart.prevent="onBrakeDown"
+          @touchend.prevent="onBrakeUp">
+          ブレーキ
+        </button>
+  
+        <button class="btn jump"
+          @pointerdown.prevent="onJumpPress"
+          @pointerup.prevent="onJumpRelease"
+          @pointercancel.prevent="onJumpRelease"
+          @touchstart.prevent="onJumpPress"
+          @touchend.prevent="onJumpRelease">
+          ジャンプ
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -545,13 +546,25 @@ export default {
 /* 追加: ボタン群 */
 .controls{
   position: absolute;
+  left: 12px;
   right: 12px;
   bottom: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
   gap: 8px;
   z-index: 20;
+  pointer-events: none;
 }
+
+.controls-right{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
 .controls .btn{
   min-width: 88px;
   min-height: 44px;
@@ -560,8 +573,17 @@ export default {
   font-weight: 700;
   background: #fff8;
   backdrop-filter: blur(6px);
+  pointer-events: auto;
 }
 .controls .btn.run   { background: #4caf50cc; color: #fff; }
 .controls .btn.brake { background: #f44336cc; color: #fff; }
 .controls .btn.jump  { grid-column: span 2; background: #2196f3cc; color: #fff; }
+
+/* 画面が狭い時は右側を横並びにする例 */
+@media (max-width: 480px){
+  .controls-right{
+    flex-direction: row;
+    align-items: center;
+  }
+}
 </style>
