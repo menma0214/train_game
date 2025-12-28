@@ -33,7 +33,7 @@
     <!-- 電車 -->
     <div
       class="train"
-      :style="{ left: anchorPx + 'px', '--jumpY': trainY + 'px' }"
+      :style="{ left: anchorPx + 'px', '--jumpY': (-trainY) + 'px' }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -411,7 +411,7 @@ export default {
 .game {
   position: relative;
   width: 100%;
-  height: 70vh;
+  height: 70dvh;
   overflow: hidden;
   background: #cfe9ff;
   user-select: none;
@@ -501,12 +501,21 @@ export default {
 
 .train {
   position: absolute;
-  bottom: calc(var(--track-bottom) - var(--track-height));
-  width: 15%;
-  height: 15%;
+  /* 線路の上端 + 少しのすき間（clearance）を基準にする */
+  bottom: calc(var(--track-bottom) + var(--track-height) + var(--clearance, -40px));
+  width: auto;   /* 画像サイズに任せる or 下の .train-image で制御 */
+  height: auto;
   z-index: 4;
   pointer-events: auto;
-  transform: translateY(calc(-50% - var(--jumpY, 0px)));
+  transform: translateY(var(--jumpY, 0px));
+}
+
+.train-image {
+  display:block;
+  /* 端末に合わせてほどよく可変。 */
+  width: clamp(120px, 15vw, 220px);
+  height:auto;
+  pointer-events:none;
 }
 .car { filter: drop-shadow(0 3px 0 rgba(0,0,0,0.2)); }
 
@@ -536,12 +545,6 @@ export default {
   z-index: 10;
 }
 
-.train-image {
-  display:block;
-  width: 154px;
-  height:auto;
-  pointer-events:none;
-}
 
 /* 追加: ボタン群 */
 .controls{
@@ -559,7 +562,7 @@ export default {
 
 .controls-right{
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   align-items: flex-end;
   pointer-events: none;
