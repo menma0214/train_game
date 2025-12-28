@@ -551,7 +551,7 @@ export default {
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: 12px;
+  bottom: 4px;
   display: flex;
   justify-content: space-around;
   align-items: flex-end;
