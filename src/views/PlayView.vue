@@ -1,16 +1,11 @@
 <template>
   <h1>電車ゲーム</h1>
 
-  <div class="game" ref="gameRoot" @contextmenu.prevent>
-    <div class="grounds">
-      <div
-        v-for="g in groundSegs"
-        :key="g.id"
-        class="ground-seg"
-        :style="{ left: (g.x - cameraX * groundPx) + 'px',
-                  backgroundImage: `url(${(g.idx & 1) ? groundTokyo : groundChiba})` }">
-      </div>
-    </div>
+  <div
+    class="game"
+    ref="gameRoot"
+    :style="{ '--bg-far-x': `${cameraX * BG_PARALLAX_FAR}px`, '--bg-near-x': `${cameraX * BG_PARALLAX_NEAR}px` }"
+    @contextmenu.prevent>
 
     <div class="track">
       <div
@@ -19,6 +14,17 @@
         class="track-seg"
         :style="{ left: (seg.x - cameraX) + 'px' }">
       </div>
+    </div>
+
+    <div class="scenery-layer">
+      <img
+        v-for="item in sceneryItems"
+        :key="item.id"
+        class="scenery"
+        :class="`scenery-${item.type}`"
+        :src="scenerySprites[item.type]"
+        :alt="item.type"
+        :style="{ left: `${item.x - cameraX}px`, width: `${item.width}px`, transform: 'translateX(-50%)' }">
     </div>
 
     <!-- 駅 -->
@@ -86,8 +92,9 @@
 <script lang="ts">
 import { onMounted, onUnmounted, reactive, ref, toRefs, computed } from 'vue'
 import trainImg from '@/assets/train.png'
-import groundTokyo from '@/assets/ground2.png'
-import groundChiba from '@/assets/ground3.png'
+import houseImg from '@/assets/house.png'
+import mallImg from '@/assets/mall.png'
+import coltonImg from '@/assets/colton.png'
 
 // ====== 操作パラメータ ======
 const FLICK_TIME = 220
@@ -113,11 +120,12 @@ const FIRST_STATION_X = 400
 const ANCHOR_RATIO = 0.1
 const TRACK_SEG_W = 240
 const TRACK_BUFFER = 600
-const GROUND_TILE_W = 813
-const GROUND_BUFFER = 600
-const GROUND_PX = 0.30
-const GROUND_OVERLAP = 0
-const GROUND_STEP = GROUND_TILE_W - GROUND_OVERLAP
+const BG_PARALLAX_FAR = 0.12
+const BG_PARALLAX_NEAR = 0.30
+const SCENERY_GAP = 24
+const STATION_HALF_W = 40
+type SceneryType = 'house' | 'mall' | 'colton'
+type SceneryItem = { id: number; type: SceneryType; x: number; width: number }
 
 export default {
   setup() {
@@ -147,7 +155,7 @@ export default {
       arrivedFlash: false,
       stations: [] as { x: number; active: boolean }[],
       trackSegs: [] as { id: number; x: number }[],
-      groundSegs: [] as { id: number; x: number; idx: number }[],
+      sceneryItems: [] as SceneryItem[],
 
       // ボタン押しっぱ用
       runHeld: false,
@@ -173,11 +181,6 @@ export default {
       const need = Math.ceil((viewportW.value + TRACK_BUFFER * 2) / TRACK_SEG_W) + 2
       return Math.max(need, 8)
     })
-    const groundSegCount = computed(() => {
-      const need = Math.ceil((viewportW.value + GROUND_BUFFER * 2) / GROUND_TILE_W) + 4
-      return Math.max(need, 8)
-    })
-
     function initStations() {
       state.stations.length = 0
       for (let i = 0; i < STATION_COUNT; i++) {
@@ -192,29 +195,84 @@ export default {
         state.trackSegs.push({ id: i, x: start + i * TRACK_SEG_W })
       }
     }
-    function initGroundSegs() {
-      state.groundSegs.length = 0
-      const camP = state.cameraX * GROUND_PX
-      const start = Math.floor((camP - GROUND_BUFFER) / GROUND_STEP) * GROUND_STEP
-      const baseIndex = Math.floor(start / GROUND_TILE_W)
-      for (let i = 0; i < groundSegCount.value; i++) {
-        state.groundSegs.push({ id: i, x: start + i * GROUND_STEP, idx: baseIndex + i })
+
+    function randomizeScenery() {
+      const width = Math.max(viewportW.value, 320)
+      const margin = 80
+      const base = state.cameraX
+      const specs: Array<{ type: SceneryType; count: number; width: number }> = [
+        { type: 'house', count: 3, width: 120 },
+        { type: 'mall', count: 1, width: 148 },
+        { type: 'colton', count: 1, width: 132 },
+      ]
+      const entries: Array<{ type: SceneryType; width: number }> = []
+      for (const spec of specs) {
+        for (let i = 0; i < spec.count; i++) entries.push({ type: spec.type, width: spec.width })
       }
+
+      state.sceneryItems.length = 0
+      const leftBound = base + margin
+      const rightBound = base + width - margin
+      let cursor = leftBound
+      let id = 1
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i]
+        const half = entry.width / 2
+        let remainingWidth = 0
+        for (let j = i + 1; j < entries.length; j++) remainingWidth += entries[j].width
+        const remainingGaps = Math.max(0, entries.length - i - 1) * SCENERY_GAP
+
+        const minCenter = cursor + half
+        const maxCenter = rightBound - (remainingWidth + remainingGaps + half)
+        let x = maxCenter > minCenter
+          ? minCenter + Math.random() * (maxCenter - minCenter)
+          : minCenter
+        x = pushRightIfStationOverlaps(x, half)
+
+        state.sceneryItems.push({ id: id++, type: entry.type, x, width: entry.width })
+        cursor = x + half + SCENERY_GAP
+      }
+      state.sceneryItems.sort((a, b) => a.x - b.x)
     }
-    function recycleGroundSegs() {
-      const camP = state.cameraX * GROUND_PX
-      const leftEdge = camP - GROUND_BUFFER
-      const rightEdge = leftEdge + groundSegCount.value * GROUND_STEP
-      for (const seg of state.groundSegs) {
-        if (seg.x + GROUND_TILE_W < leftEdge) {
-          seg.x += groundSegCount.value * GROUND_STEP
-          seg.idx += groundSegCount.value
-        } else if (seg.x > rightEdge) {
-          seg.x -= groundSegCount.value * GROUND_STEP
-          seg.idx -= groundSegCount.value
+
+    function pushRightIfStationOverlaps(centerX: number, half: number) {
+      let x = centerX
+      for (let i = 0; i < 24; i++) {
+        const blocker = state.stations.find((st) =>
+          Math.abs(st.x - x) < (half + STATION_HALF_W + SCENERY_GAP)
+        )
+        if (!blocker) break
+        x = blocker.x + half + STATION_HALF_W + SCENERY_GAP
+      }
+      return x
+    }
+
+    function recycleScenery() {
+      const width = Math.max(viewportW.value, 320)
+      const leftEdge = state.cameraX - 120
+      for (const item of state.sceneryItems) {
+        const half = item.width / 2
+        if (item.x + half < leftEdge) {
+          const rightMostEdge = state.sceneryItems.reduce(
+            (m, cur) => Math.max(m, cur.x + cur.width / 2),
+            state.cameraX + width
+          )
+          const minCenter = rightMostEdge + SCENERY_GAP + half
+          item.x = minCenter + Math.random() * Math.max(60, width * 0.2)
         }
+        item.x = pushRightIfStationOverlaps(item.x, half)
+      }
+
+      // 画像同士の非重複を再保証（駅回避で右へ寄せた後の衝突を防ぐ）
+      state.sceneryItems.sort((a, b) => a.x - b.x)
+      for (let i = 1; i < state.sceneryItems.length; i++) {
+        const prev = state.sceneryItems[i - 1]
+        const cur = state.sceneryItems[i]
+        const minX = prev.x + prev.width / 2 + cur.width / 2 + SCENERY_GAP
+        if (cur.x < minX) cur.x = minX
       }
     }
+    
     function recycleTrackSegs() {
       const leftEdge = state.cameraX - TRACK_BUFFER
       const rightEdge = leftEdge + segCount.value * TRACK_SEG_W
@@ -361,7 +419,7 @@ export default {
 
       checkArrival()
       recycleStations()
-      recycleGroundSegs()
+      recycleScenery()
       recycleTrackSegs()
       raf = requestAnimationFrame(tick)
     }
@@ -369,7 +427,7 @@ export default {
     const onResize = () => {
       viewportW.value = gameRoot.value?.clientWidth || window.innerWidth
       initTrackSegs()
-      initGroundSegs()
+      randomizeScenery()
     }
 
     onMounted(() => {
@@ -380,7 +438,7 @@ export default {
         viewportW.value = gameRoot.value.clientWidth || window.innerWidth
       }
       initTrackSegs()
-      initGroundSegs()
+      randomizeScenery()
       window.addEventListener('resize', onResize)
       raf = requestAnimationFrame(tick)
     })
@@ -398,10 +456,13 @@ export default {
       onJumpPress, onJumpRelease,
       anchorPx,
       trainImg,
-      groundTokyo, groundChiba,
-      trackSegs: state.trackSegs,
-      groundSegs: state.groundSegs,
-      groundPx: GROUND_PX,
+      scenerySprites: {
+        house: houseImg,
+        mall: mallImg,
+        colton: coltonImg,
+      } as Record<SceneryType, string>,
+      BG_PARALLAX_FAR,
+      BG_PARALLAX_NEAR,
     }
   }
 }
@@ -413,52 +474,55 @@ export default {
   width: 100%;
   height: 70dvh;
   overflow: hidden;
-  background: #cfe9ff;
+  background:
+    radial-gradient(110% 70% at 50% 0%, #fff4cc 0%, #d6ebff 45%, #b7dbff 100%);
   user-select: none;
   touch-action: none;
   --track-bottom: 20%;
   --track-height: 10px;
 }
 
-.grounds {
+.game::before,
+.game::after {
+  content: "";
   position: absolute;
-  left: 0; right: 0; bottom: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 100%;
   z-index: 1;
   pointer-events: none;
 }
-.ground-seg {
-  position: absolute;
-  bottom: 0;
-  width: 813px;
-  height: 100%;
-  background-repeat: no-repeat;
-  background-size: auto 100%;
-  will-change: left;
-  overflow: hidden;
+
+.game::before {
+  background:
+    radial-gradient(ellipse at 20% 38%, #ffffffcc 0 22%, transparent 24%) 0 0 / 320px 130px repeat-x,
+    radial-gradient(ellipse at 72% 35%, #ffffffaa 0 20%, transparent 22%) 160px 8px / 360px 130px repeat-x,
+    linear-gradient(to top, #80b18a 0 22%, transparent 22%),
+    radial-gradient(150% 90% at 0% 100%, #7ca78b 0 38%, transparent 39%) 0 100% / 520px 45% repeat-x;
+  background-position:
+    calc(var(--bg-far-x, 0px) * -0.3) 5%,
+    calc(var(--bg-far-x, 0px) * -0.2) 12%,
+    0 100%,
+    calc(var(--bg-far-x, 0px) * -1) 100%;
 }
 
-/* 端のぼかし（必要なら残す） */
-.ground-seg::before,
-.ground-seg::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  height: 100%;
-  width: 32px;
-  pointer-events: none;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-.ground-seg::before {
-  left: 0;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 100%);
-          mask-image: linear-gradient(to right, transparent 0, black 100%);
-}
-.ground-seg::after  {
-  right: 0;
-  -webkit-mask-image: linear-gradient(to left, transparent 0, black 100%);
-          mask-image: linear-gradient(to left, transparent 0, black 100%);
+.game::after {
+  background:
+    repeating-linear-gradient(
+      to right,
+      #8bb26c 0 26px,
+      #95bd72 26px 52px,
+      #7fa45f 52px 78px
+    ) 0 100% / 420px 22% repeat-x,
+    repeating-linear-gradient(
+      to right,
+      #c18f52 0 10px,
+      #b47f48 10px 20px
+    ) 0 calc(100% - 22%) / 120px 6% repeat-x;
+  background-position:
+    calc(var(--bg-near-x, 0px) * -1) 100%,
+    calc(var(--bg-near-x, 0px) * -1.35) calc(100% - 22%);
 }
 
 .track {
@@ -477,6 +541,29 @@ export default {
     #777 30px, #777 60px
   );
   box-shadow: 0 4px 0 #333 inset;
+}
+
+.scenery-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.scenery {
+  position: absolute;
+  bottom: calc(var(--track-bottom) + var(--track-height) - 4%);
+  height: auto;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.2));
+  transform-origin: bottom center;
+}
+
+.scenery-mall {
+  bottom: calc(var(--track-bottom) + var(--track-height) - 5%);
+}
+
+.scenery-colton {
+  bottom: calc(var(--track-bottom) + var(--track-height));
 }
 
 .station {
