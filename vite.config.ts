@@ -1,19 +1,17 @@
+// vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath, URL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname  = dirname(__filename)
 
 export default defineConfig({
   plugins: [vue()],
-  server: {
-    host: true, //Dockerから外へ公開
-    port: 5173,
-    // strictPort: true,
-    watch: {usePolling: true} //コンテナ越しの監視を安定化
-    // hmr: { clientPort: 5173 } //HMRが不安定な場合のみ有効化
-  },
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
+      '@': resolve(__dirname, 'src')
+    }
+  }
 })
