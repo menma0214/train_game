@@ -1,5 +1,11 @@
 <template>
-  <h1>電車ゲーム</h1>
+  <h1 class="gamePageTitle">電車ゲーム</h1>
+
+  <div class="hud">
+      <div>速度: {{ speed.toFixed(1) }}</div>
+      <div>位置: {{ trainX.toFixed(0) }}m</div>
+      <div>操作: 右ドラッグ長押し=前進 / 左フリック=ブレーキ / 上フリック=ジャンプ</div>
+    </div>
 
   <div
     class="game"
@@ -34,7 +40,12 @@
       class="station"
       :style="{ left: (st.x - cameraX) + 'px' }"
       @pointerdown.prevent="onStationTap(i)"
-      :data-active="st.active">駅</div>
+      :data-active="st.active">
+      <img
+        class="station-image"
+        :src="stationImg"
+        alt="駅">
+    </div>
 
     <!-- 電車 -->
     <div
@@ -48,12 +59,6 @@
         <img class="train-image" :src="trainImg" alt="電車">
       </div>
       <div class="caption" v-if="arrivedFlash">到着！</div>
-    </div>
-
-    <div class="hud">
-      <div>速度: {{ speed.toFixed(1) }}</div>
-      <div>位置: {{ trainX.toFixed(0) }}m</div>
-      <div>操作: 右ドラッグ長押し=前進 / 左フリック=ブレーキ / 上フリック=ジャンプ</div>
     </div>
 
     <!-- 追加: 操作ボタン -->
@@ -95,6 +100,8 @@ import trainImg from '@/assets/train.png'
 import houseImg from '@/assets/house.png'
 import mallImg from '@/assets/mall.png'
 import coltonImg from '@/assets/colton.png'
+import stationImg from '@/assets/station.png'
+import amusementParkImg from '@/assets/amusement_park.png'
 
 // ====== 操作パラメータ ======
 const FLICK_TIME = 220
@@ -116,7 +123,7 @@ const MAX_FALL   = -1400
 // シーン定数
 const STATION_INTERVAL = 5000
 const STATION_COUNT = 8
-const FIRST_STATION_X = 400
+const FIRST_STATION_X = 2000
 const ANCHOR_RATIO = 0.1
 const TRACK_SEG_W = 240
 const TRACK_BUFFER = 600
@@ -124,7 +131,7 @@ const BG_PARALLAX_FAR = 0.12
 const BG_PARALLAX_NEAR = 0.30
 const SCENERY_GAP = 24
 const STATION_HALF_W = 40
-type SceneryType = 'house' | 'mall' | 'colton'
+type SceneryType = 'house' | 'mall' | 'colton' | 'amusementPark'
 type SceneryItem = { id: number; type: SceneryType; x: number; width: number }
 
 export default {
@@ -201,9 +208,12 @@ export default {
       const margin = 80
       const base = state.cameraX
       const specs: Array<{ type: SceneryType; count: number; width: number }> = [
-        { type: 'house', count: 3, width: 120 },
-        { type: 'mall', count: 1, width: 148 },
-        { type: 'colton', count: 1, width: 132 },
+        { type: 'house', count: 3, width: 150 },
+        { type: 'mall', count: 1, width: 230 },
+        { type: 'house', count: 2, width: 150 },
+        { type: 'colton', count: 1, width: 230 },
+        { type: 'house', count: 3, width: 150 },
+        { type: 'amusementPark', count: 1, width: 235 },
       ]
       const entries: Array<{ type: SceneryType; width: number }> = []
       for (const spec of specs) {
@@ -403,9 +413,9 @@ export default {
 
       // ジャンプ物理（修正: vy に重力を加え、y は vy で積分）
       if (!state.onGround) {
-        state.vy += GRAVITY * dt                 // ← 修正
+        state.vy += GRAVITY * dt
         if (state.vy < MAX_FALL) state.vy = MAX_FALL
-        state.trainY += state.vy * dt            // ← 修正
+        state.trainY += state.vy * dt
         if (state.trainY <= 0) {
           state.trainY = 0
           state.vy = 0
@@ -456,10 +466,12 @@ export default {
       onJumpPress, onJumpRelease,
       anchorPx,
       trainImg,
+      stationImg,
       scenerySprites: {
         house: houseImg,
         mall: mallImg,
         colton: coltonImg,
+        amusementPark: amusementParkImg,
       } as Record<SceneryType, string>,
       BG_PARALLAX_FAR,
       BG_PARALLAX_NEAR,
@@ -552,36 +564,42 @@ export default {
 
 .scenery {
   position: absolute;
-  bottom: calc(var(--track-bottom) + var(--track-height) - 4%);
+  bottom: calc(var(--track-bottom) + var(--track-height) - 6%);
   height: auto;
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.2));
   transform-origin: bottom center;
 }
 
 .scenery-mall {
-  bottom: calc(var(--track-bottom) + var(--track-height) - 5%);
+  bottom: calc(var(--track-bottom) + var(--track-height) - 8.5%);
 }
 
 .scenery-colton {
-  bottom: calc(var(--track-bottom) + var(--track-height));
+  bottom: calc(var(--track-bottom) + var(--track-height) - 1%);
+}
+
+.scenery-amusementPark {
+  bottom: calc(var(--track-bottom) + var(--track-height) - 16%);
 }
 
 .station {
   position: absolute;
-  bottom: calc(var(--track-bottom) + var(--track-height) + 8px);
-  width: 80px;
-  height: 50px;
+  bottom: calc(var(--track-bottom) + var(--track-height) - 23%);
+  width: 105%;
+  height: 105%;
   line-height: 50px;
-  text-align: center;
-  font-weight: bold;
-  background: #fff;
-  border: 2px solid #444;
-  border-radius: 8px;
   transform: translateX(-50%);
   z-index: 3;
   cursor: pointer;
   transition: transform 0.2s ease;
   touch-action: none;
+}
+.station-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 .station[data-active="true"] { border-color: #2d8cf0; }
 .station:active { transform: translateX(-50%) scale(0.95); }
@@ -622,9 +640,14 @@ export default {
   100% { transform: translateX(-50%) scale(1.05); opacity: 0; }
 }
 
+.gamePageTitle {
+  padding-left: 1%;
+}
+
 .hud {
   position: absolute;
-  left: 8px; top: 8px;
+  left: 23%;
+  top: 3%;
   background: #0008; color: #fff;
   font-size: 12px;
   padding: 6px 8px;
@@ -633,7 +656,7 @@ export default {
 }
 
 
-/* 追加: ボタン群 */
+/* ボタン */
 .controls{
   position: absolute;
   left: 12px;
@@ -669,7 +692,7 @@ export default {
 .controls .btn.brake { background: #f44336cc; color: #fff; }
 .controls .btn.jump  { grid-column: span 2; background: #2196f3cc; color: #fff; }
 
-/* 画面が狭い時は右側を横並びにする例 */
+/* 画面が狭い時は右側を横並びにする */
 @media (max-width: 480px){
   .controls-right{
     flex-direction: row;
