@@ -8,19 +8,20 @@
 
     <div class="modal">
       <p class="modal-desc">「あそぶ」をゲームスタート！</p>
-      <button class="btn-primary" @crick="goPlay"></button>
+      <button class="btn-primary" type="button" @click="goPlay">ゲームスタート！</button>
     </div>
   </div>
 </template>
 
-<script>
-  import { useRoute } from 'vue-router';
-  import demoSrc from '@/assets/train.png'//動画を用意していないため画像で仮配置
-  
-  const router = useRoute()
-  function goPlay(){
-    router.push({ name: 'play' })
-  }
+<script setup lang="ts">
+import { useRouter } from 'vue-router'
+import demoSrc from '@/assets/train.png' // 動画を用意していないため画像で仮配置
+
+const router = useRouter()
+
+function goPlay() {
+  router.push('/play')
+}
 </script>
 
 <style>
