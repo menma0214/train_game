@@ -5,7 +5,7 @@
       <div>速度: {{ speed.toFixed(1) }}</div>
       <div>位置: {{ trainX.toFixed(0) }}m</div>
       <div>操作: 右ドラッグ長押し=前進 / 左フリック=ブレーキ / 上フリック=ジャンプ</div>
-    </div>
+  </div>
 
   <div
     class="game"
@@ -56,13 +56,58 @@
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp">
       <div class="car">
-        <img class="train-image" :src="trainImg" alt="電車">
+        <img
+        class="train-image"
+        :src="currentTrainImg"
+        :alt="selectedTrain === 'shinkansen' ? '新幹線' : '電車'">
       </div>
       <div class="caption" v-if="arrivedFlash">到着！</div>
     </div>
 
+    <!-- 茶トラ猫 -->
+    <div
+      v-if="catActive"
+      class="cat"
+      :style="{ left: `${catX - cameraX}px` }"
+      aria-hidden="true">
+      <div class="cat-figure">
+        <div class="cat-tail"></div>
+        <div class="cat-body">
+          <span class="cat-belly"></span>
+          <span class="cat-stripe cat-stripe-back"></span>
+          <span class="cat-stripe cat-stripe-middle"></span>
+          <span class="cat-stripe cat-stripe-front"></span>
+        </div>
+        <span class="cat-paw cat-paw-back"></span>
+        <span class="cat-paw cat-paw-front"></span>
+        <div class="cat-head">
+          <span class="cat-ear cat-ear-left"></span>
+          <span class="cat-ear cat-ear-right"></span>
+          <span class="cat-head-stripe cat-head-stripe-left"></span>
+          <span class="cat-head-stripe cat-head-stripe-center"></span>
+          <span class="cat-head-stripe cat-head-stripe-right"></span>
+          <span class="cat-muzzle"></span>
+          <span class="cat-eye cat-eye-left"></span>
+          <span class="cat-eye cat-eye-right"></span>
+          <span class="cat-cheek cat-cheek-left"></span>
+          <span class="cat-cheek cat-cheek-right"></span>
+          <span class="cat-nose"></span>
+          <span class="cat-mouth cat-mouth-left"></span>
+          <span class="cat-mouth cat-mouth-right"></span>
+          <span class="cat-whiskers cat-whiskers-left"></span>
+          <span class="cat-whiskers cat-whiskers-right"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- 追加: 操作ボタン -->
     <div class="controls">
+      <button class="btn skin"
+        type="button"
+        @click="toggleTrainImage">
+        {{ selectedTrain === 'train' ? '新幹線に切り替え' : '電車に切り替え' }}
+      </button>
+
       <button class="btn run"
         @pointerdown.prevent="onRunDown"
         @pointerup.prevent="onRunUp"
@@ -71,6 +116,7 @@
         @touchend.prevent="onRunUp">
         走る
       </button>
+
       <div class="controls-right">
         <button class="btn brake"
           @pointerdown.prevent="onBrakeDown"
@@ -80,7 +126,7 @@
           @touchend.prevent="onBrakeUp">
           ブレーキ
         </button>
-  
+
         <button class="btn jump"
           @pointerdown.prevent="onJumpPress"
           @pointerup.prevent="onJumpRelease"
@@ -97,6 +143,7 @@
 <script lang="ts">
 import { onMounted, onUnmounted, reactive, ref, toRefs, computed } from 'vue'
 import trainImg from '@/assets/train.png'
+import shinkansenImg from '@/assets/shinkansen.png'
 import houseImg from '@/assets/house.png'
 import mallImg from '@/assets/mall.png'
 import coltonImg from '@/assets/colton.png'
@@ -131,11 +178,25 @@ const BG_PARALLAX_FAR = 0.12
 const BG_PARALLAX_NEAR = 0.30
 const SCENERY_GAP = 24
 const STATION_HALF_W = 40
+const CAT_SPAWN_MIN_SEC = 2
+const CAT_SPAWN_MAX_SEC = 5
+const CAT_SPEED_MIN = 120
+const CAT_SPEED_MAX = 180
+const CAT_SPAWN_MARGIN = 140
+const CAT_DESPAWN_MARGIN = 220
 type SceneryType = 'house' | 'mall' | 'colton' | 'amusementPark'
 type SceneryItem = { id: number; type: SceneryType; x: number; width: number }
 
 export default {
   setup() {
+    // trainSpritesに使うキーを定義
+    type TrainKind = 'train' | 'shinkansen'
+    //キーが train, shinkansen で値が文字列になるオブジェクトの型定義
+    const trainSprites: Record<TrainKind, string> = {
+      train: trainImg,
+      shinkansen: shinkansenImg,
+    }
+
     const state = reactive({
       // 入力
       isHolding: false,
@@ -148,7 +209,7 @@ export default {
       speed: 0,
       friction: 0.98,
       accelPerFlick: 2.5,
-      maxSpeed: 20,
+      maxSpeed: 10,
 
       // ジャンプ
       trainY: 0,
@@ -163,6 +224,13 @@ export default {
       stations: [] as { x: number; active: boolean }[],
       trackSegs: [] as { id: number; x: number }[],
       sceneryItems: [] as SceneryItem[],
+      selectedTrain: 'train' as TrainKind,
+
+      //猫
+      catActive: false,
+      catX: 0,
+      catSpeed: 0,
+      catNextSpawnIn: 0,
 
       // ボタン押しっぱ用
       runHeld: false,
@@ -170,11 +238,18 @@ export default {
       jumpHeld: false,
     })
 
+    const currentTrainImg = computed(() => trainSprites[state.selectedTrain])
+
+    function toggleTrainImage () {
+      state.selectedTrain = state.selectedTrain === 'train' ? 'shinkansen' : 'train'
+    }
+
     function tryJump() {
       if (!state.onGround) return
       state.onGround = false
       state.vy = JUMP_SPEED
     }
+
     function applyBrakeImpulse() {
       const IMPULSE = 6.0
       state.speed = Math.max(0, state.speed - IMPULSE)
@@ -282,7 +357,7 @@ export default {
         if (cur.x < minX) cur.x = minX
       }
     }
-    
+
     function recycleTrackSegs() {
       const leftEdge = state.cameraX - TRACK_BUFFER
       const rightEdge = leftEdge + segCount.value * TRACK_SEG_W
@@ -294,6 +369,7 @@ export default {
         }
       }
     }
+
     function recycleStations() {
       const LOOP_LENGTH = STATION_INTERVAL * STATION_COUNT
       const recycleStations = state.cameraX - 1000
@@ -317,6 +393,7 @@ export default {
       state.startY = state.lastY = y
       ;(e.target as Element | null)?.setPointerCapture?.((e as PointerEvent).pointerId ?? 0)
     }
+
     function onPointerMove(e: PointerEvent | TouchEvent) {
       if (!pointerDown) return
       const x = (e as PointerEvent).clientX ?? (e as TouchEvent).touches?.[0]?.clientX ?? 0
@@ -330,6 +407,7 @@ export default {
         state.speed = Math.min(state.speed + HOLD_ACCEL, state.maxSpeed)
       }
     }
+
     function onPointerUp() {
       if (!pointerDown) return
       pointerDown = false
@@ -355,8 +433,8 @@ export default {
       state.jumpHeld = true
       tryJump()
     }
-    function onJumpRelease() { state.jumpHeld = false }
 
+    function onJumpRelease() { state.jumpHeld = false }
     // 駅タップで停車（簡易減速演出）
     function onStationTap(index: number) {
       const st = state.stations[index]
@@ -392,6 +470,32 @@ export default {
       }
     }
 
+    function resetCatSpawnTimer() {
+      state.catNextSpawnIn =
+      CAT_SPAWN_MIN_SEC + Math.random() * (CAT_SPAWN_MAX_SEC - CAT_SPAWN_MIN_SEC)
+    }
+
+    function spawnCat() {
+      const width = Math.max(viewportW.value, 320)
+      state.catActive = true
+      state.catX = state.cameraX + width + CAT_SPAWN_MARGIN
+      state.catSpeed = CAT_SPEED_MIN + Math.random() * (CAT_SPEED_MAX - CAT_SPEED_MIN)
+    }
+
+    function updateCat(dt: number) {
+      if (!state.catActive) {
+        state.catNextSpawnIn -= dt
+        if (state.catNextSpawnIn <= 0) spawnCat()
+        return
+      }
+
+      state.catX -= state.catSpeed * dt
+
+      if (state.catX < state.cameraX - CAT_DESPAWN_MARGIN) {
+        state.catActive = false
+        resetCatSpawnTimer()
+      }
+    }
     // ループ
     let raf = 0
     let lastT = performance.now()
@@ -427,6 +531,7 @@ export default {
       const desired = state.trainX - anchorPx.value
       state.cameraX += (desired - state.cameraX) * 0.1
 
+      updateCat(dt)
       checkArrival()
       recycleStations()
       recycleScenery()
@@ -449,6 +554,7 @@ export default {
       }
       initTrackSegs()
       randomizeScenery()
+      resetCatSpawnTimer()
       window.addEventListener('resize', onResize)
       raf = requestAnimationFrame(tick)
     })
@@ -464,6 +570,8 @@ export default {
       onStationTap,
       onRunDown, onRunUp, onBrakeDown, onBrakeUp,
       onJumpPress, onJumpRelease,
+      toggleTrainImage,
+      currentTrainImg,
       anchorPx,
       trainImg,
       stationImg,
@@ -542,6 +650,7 @@ export default {
   inset: 0;
   z-index: 2;
 }
+
 .track-seg {
   position: absolute;
   bottom: var(--track-bottom);
@@ -640,6 +749,372 @@ export default {
   100% { transform: translateX(-50%) scale(1.05); opacity: 0; }
 }
 
+.cat {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--track-bottom) + var(--track-height));
+  width: clamp(128px, 16vw, 188px);
+  aspect-ratio: 1.15;
+  z-index: 5;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.16));
+}
+
+.cat,
+.cat * {
+  box-sizing: border-box;
+  width: 8%;
+}
+
+.cat-figure {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  transform-origin: center;
+  animation: cat-bob 4.2s ease-in-out infinite;
+}
+
+.cat::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 10%;
+  bottom: 4%;
+  height: 10%;
+  background: rgba(90, 60, 36, 0.22);
+  border-radius: 50%;
+  filter: blur(4px);
+  z-index: 0;
+}
+
+.cat-tail,
+.cat-body,
+.cat-head,
+.cat-belly,
+.cat-stripe,
+.cat-paw,
+.cat-ear,
+.cat-head-stripe,
+.cat-muzzle,
+.cat-eye,
+.cat-cheek,
+.cat-nose,
+.cat-mouth,
+.cat-whiskers {
+  position: absolute;
+}
+
+.cat-tail {
+  left: 7%;
+  bottom: 24%;
+  width: 18%;
+  height: 48%;
+  border: 3px solid #6e441f;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      #e3a154 0 14px,
+      #e3a154 14px 18px,
+      #be6421 18px 26px
+    );
+  transform-origin: bottom center;
+  transform: rotate(-26deg);
+  z-index: 1;
+  animation: cat-tail-swish 3.5s ease-in-out infinite;
+}
+
+.cat-body {
+  left: 18%;
+  bottom: 7%;
+  width: 47%;
+  height: 42%;
+  border: 3px solid #6e441f;
+  border-radius: 50% 50% 42% 42%;
+  background: linear-gradient(180deg, #eca655 0%, #db8433 100%);
+  overflow: hidden;
+  transform: rotate(-6deg);
+  z-index: 2;
+}
+
+.cat-belly {
+  left: 22%;
+  bottom: 2%;
+  width: 56%;
+  height: 60%;
+  border-radius: 50%;
+  background: #fff0db;
+  z-index: 1;
+}
+
+.cat-stripe {
+  top: 8%;
+  width: 15%;
+  height: 58%;
+  border-radius: 999px;
+  background: #b85d1d;
+  z-index: 2;
+}
+
+.cat-stripe-back {
+  left: 16%;
+  transform: rotate(-16deg);
+}
+
+.cat-stripe-middle {
+  left: 42%;
+}
+
+.cat-stripe-front {
+  left: 67%;
+  transform: rotate(12deg);
+}
+
+.cat-paw {
+  bottom: -4%;
+  width: 19%;
+  height: 23%;
+  border: 3px solid #6e441f;
+  border-radius: 48% 48% 38% 38%;
+  background: #fff4e5;
+  z-index: 3;
+  transform-origin: center 10%;
+  animation: cat-paw-step 0.95s ease-in-out infinite;
+}
+
+.cat-paw::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 26%;
+  width: 2px;
+  height: 30%;
+  background: rgba(110, 68, 31, 0.4);
+  transform: translateX(-50%);
+  box-shadow:
+    -10px 2px 0 rgba(110, 68, 31, 0.28),
+    10px 2px 0 rgba(110, 68, 31, 0.28);
+}
+
+.cat-paw-back {
+  left: 17%;
+  animation-delay: -0.48s;
+}
+
+.cat-paw-front {
+  left: 43%;
+}
+
+.cat-head {
+  right: 2%;
+  top: 23%;
+  width: 50%;
+  height: 48%;
+  border: 3px solid #6e441f;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #efab5b 0%, #de8e3d 100%);
+  z-index: 4;
+}
+
+.cat-ear {
+  top: -13%;
+  width: 28%;
+  height: 31%;
+  border: 3px solid #6e441f;
+  background: #eea659;
+  overflow: hidden;
+}
+
+.cat-ear::after {
+  content: "";
+  position: absolute;
+  inset: 28% 20% 10%;
+  background: #f6c1b3;
+}
+
+.cat-ear-left {
+  left: 8%;
+  border-radius: 70% 12% 14% 22%;
+  transform: rotate(-24deg);
+}
+
+.cat-ear-right {
+  right: 8%;
+  border-radius: 12% 70% 22% 14%;
+  transform: rotate(24deg);
+}
+
+.cat-head-stripe {
+  top: 12%;
+  width: 13%;
+  height: 24%;
+  border-radius: 999px;
+  background: #b85d1d;
+  z-index: 1;
+}
+
+.cat-head-stripe-left {
+  left: 28%;
+  transform: rotate(-20deg);
+}
+
+.cat-head-stripe-center {
+  left: 44%;
+}
+
+.cat-head-stripe-right {
+  left: 60%;
+  transform: rotate(20deg);
+}
+
+.cat-muzzle {
+  left: 28%;
+  top: 48%;
+  width: 44%;
+  height: 27%;
+  border-radius: 48% 48% 56% 56%;
+  background: #fff2e2;
+  z-index: 2;
+}
+
+.cat-eye {
+  top: 41%;
+  width: 10%;
+  height: 16%;
+  border-radius: 50%;
+  background: #2d2621;
+  z-index: 3;
+  transform-origin: center 65%;
+  animation: cat-blink 4.8s infinite;
+}
+
+.cat-eye-left {
+  left: 32%;
+}
+
+.cat-eye-right {
+  right: 32%;
+}
+
+.cat-cheek {
+  top: 60%;
+  width: 10%;
+  height: 8%;
+  border-radius: 50%;
+  background: rgba(248, 170, 160, 0.7);
+  z-index: 3;
+}
+
+.cat-cheek-left {
+  left: 24%;
+}
+
+.cat-cheek-right {
+  right: 24%;
+}
+
+.cat-nose {
+  left: 46%;
+  top: 57%;
+  width: 8%;
+  height: 7%;
+  background: #ef8f8a;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  z-index: 4;
+}
+
+.cat-mouth {
+  top: 61%;
+  width: 10%;
+  height: 11%;
+  border-bottom: 2px solid #6e441f;
+  z-index: 4;
+}
+
+.cat-mouth-left {
+  left: 40%;
+  border-left: 2px solid #6e441f;
+  border-radius: 0 0 0 12px;
+  transform: rotate(-8deg);
+}
+
+.cat-mouth-right {
+  right: 40%;
+  border-right: 2px solid #6e441f;
+  border-radius: 0 0 12px 0;
+  transform: rotate(8deg);
+}
+
+.cat-whiskers {
+  top: 60%;
+  width: 30%;
+  height: 2px;
+  background: rgba(110, 68, 31, 0.7);
+  z-index: 2;
+}
+
+.cat-whiskers::before,
+.cat-whiskers::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: rgba(110, 68, 31, 0.7);
+}
+
+.cat-whiskers-left {
+  left: -2%;
+  /* transform: rotate(8deg); */
+}
+
+.cat-whiskers-left::before {
+  top: -5px;
+  transform: rotate(8deg);
+}
+
+.cat-whiskers-left::after {
+  top: 4px;
+  transform: rotate(-15deg);
+}
+
+.cat-whiskers-right {
+  right: -2%;
+  /* transform: rotate(-8deg); */
+}
+
+.cat-whiskers-right::before {
+  top: -5px;
+  transform: rotate(-4deg);
+}
+
+.cat-whiskers-right::after {
+  top: 5px;
+  transform: rotate(15deg);
+}
+
+@keyframes cat-tail-swish {
+  0%, 100% { transform: rotate(-26deg); }
+  50% { transform: rotate(10deg); }
+}
+
+@keyframes cat-blink {
+  0%, 44%, 48%, 100% { transform: scaleY(1); }
+  45%, 47% { transform: scaleY(0.12); }
+}
+
+@keyframes cat-paw-step {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-4px) rotate(-8deg); }
+  50% { transform: translateY(3px) rotate(7deg); }
+  75% { transform: translateY(-2px) rotate(-4deg); }
+}
+
+@keyframes cat-bob {
+  0%, 100% { transform: translateY(0) scaleX(-1); }
+  50% { transform: translateY(-3px) scaleX(-1); }
+}
+
 .gamePageTitle {
   padding-left: 1%;
 }
@@ -654,7 +1129,6 @@ export default {
   border-radius: 6px;
   z-index: 10;
 }
-
 
 /* ボタン */
 .controls{
@@ -688,6 +1162,7 @@ export default {
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
+
 .controls .btn.run   { background: #4caf50cc; color: #fff; }
 .controls .btn.brake { background: #f44336cc; color: #fff; }
 .controls .btn.jump  { grid-column: span 2; background: #2196f3cc; color: #fff; }

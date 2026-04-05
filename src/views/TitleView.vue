@@ -15,7 +15,7 @@
 
 <script>
   import { useRoute } from 'vue-router';
-  import demoSrc from '@/assets/kodama.png'//動画を用意していないため画像で仮配置
+  import demoSrc from '@/assets/train.png'//動画を用意していないため画像で仮配置
   
   const router = useRoute()
   function goPlay(){
