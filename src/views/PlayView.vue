@@ -1,11 +1,23 @@
 <template>
-  <h1 class="gamePageTitle">電車ゲーム</h1>
-
-  <div class="hud">
+  <!-- <h1 class="gamePageTitle">電車ゲーム</h1> -->
+<!-- 検証 -->
+  <!-- <div class="hud">
       <div>速度: {{ speed.toFixed(1) }}</div>
       <div>位置: {{ trainX.toFixed(0) }}m</div>
       <div>操作: 右ドラッグ長押し=前進 / 左フリック=ブレーキ / 上フリック=ジャンプ</div>
+  </div> -->
+
+  <div v-if="gameOver" class="game-over-overlay">
+    <div class="game-over-card">
+      <p class="game-over-label">GAME OVER</p>
+      <h2 class="game-over-title">🙀めんまにぶつかってしまった🙀</h2>
+      <p class="game-over-text">ジャンプしてめんまをよけよう！</p>
+      <button class="btn restart" type="button" @click="restartGame">
+        もういちど遊ぶ
+      </button>
+    </div>
   </div>
+
 
   <div
     class="game"
@@ -104,11 +116,13 @@
     <div class="controls">
       <button class="btn skin"
         type="button"
+        :disabled="gameOver"
         @click="toggleTrainImage">
         {{ selectedTrain === 'train' ? '新幹線に切り替え' : '電車に切り替え' }}
       </button>
 
       <button class="btn run"
+        :disabled="gameOver"
         @pointerdown.prevent="onRunDown"
         @pointerup.prevent="onRunUp"
         @pointercancel.prevent="onRunUp"
@@ -119,6 +133,7 @@
 
       <div class="controls-right">
         <button class="btn brake"
+        :disabled="gameOver"
           @pointerdown.prevent="onBrakeDown"
           @pointerup.prevent="onBrakeUp"
           @pointercancel.prevent="onBrakeUp"
@@ -128,6 +143,7 @@
         </button>
 
         <button class="btn jump"
+        :disabled="gameOver"
           @pointerdown.prevent="onJumpPress"
           @pointerup.prevent="onJumpRelease"
           @pointercancel.prevent="onJumpRelease"
@@ -184,8 +200,21 @@ const CAT_SPEED_MIN = 120
 const CAT_SPEED_MAX = 180
 const CAT_SPAWN_MARGIN = 140
 const CAT_DESPAWN_MARGIN = 220
+const TRAIN_RENDER_MIN_W = 120
+const TRAIN_RENDER_MAX_W = 220
+const TRAIN_RENDER_RATIO = 0.15
+const CAT_RENDER_MIN_W = 128
+const CAT_RENDER_MAX_W = 188
+const CAT_RENDER_RATIO = 0.16
+const CAT_ASPECT_RATIO = 1.15
+
+
+// 当たり判定
+const TRAIN_HITBOX = { left: 0.18, right: 0.78, bottom: 0.05, top: 0.28}
+const CAT_HITBOX = {left: 0.18, right: 0.74, bottom: 0.02, top: 0.34 }
 type SceneryType = 'house' | 'mall' | 'colton' | 'amusementPark'
 type SceneryItem = { id: number; type: SceneryType; x: number; width: number }
+type CollisionRect = { left: number; right: number; bottom: number; top: number; }
 
 export default {
   setup() {
@@ -231,6 +260,7 @@ export default {
       catX: 0,
       catSpeed: 0,
       catNextSpawnIn: 0,
+      gameOver: false,
 
       // ボタン押しっぱ用
       runHeld: false,
@@ -241,10 +271,12 @@ export default {
     const currentTrainImg = computed(() => trainSprites[state.selectedTrain])
 
     function toggleTrainImage () {
+      if(state.gameOver) return
       state.selectedTrain = state.selectedTrain === 'train' ? 'shinkansen' : 'train'
     }
 
     function tryJump() {
+      if (state.gameOver) return
       if (!state.onGround) return
       state.onGround = false
       state.vy = JUMP_SPEED
@@ -258,6 +290,73 @@ export default {
     const gameRoot = ref<HTMLElement | null>(null)
     const viewportW = ref(0)
     const anchorPx = computed(() => Math.max(0, Math.round(viewportW.value * ANCHOR_RATIO)))
+
+    const clampValue = (value: number, min: number, max: number) =>
+      Math.min(max, Math.max(min, value))
+    const getTrainRenderSize = () => {
+      const width = clampValue(
+         viewportW.value * TRAIN_RENDER_RATIO,
+         TRAIN_RENDER_MIN_W,
+         TRAIN_RENDER_MAX_W
+      )
+      return { width, height: width }
+    }
+
+    const getCatRenderSize = () => {
+      const width = clampValue(
+        viewportW.value * CAT_RENDER_RATIO,
+        CAT_RENDER_MIN_W,
+        CAT_RENDER_MAX_W
+      )
+      return { width, height: width / CAT_ASPECT_RATIO }
+    }
+
+    function getTrainCollisionRect(): CollisionRect {
+      const {width, height } = getTrainRenderSize()
+      return {
+        left: state.trainX + width * TRAIN_HITBOX.left,
+        right: state.trainX + width * TRAIN_HITBOX.right,
+        bottom: state.trainY + height * TRAIN_HITBOX.bottom,
+        top: state.trainY + height * TRAIN_HITBOX.top,
+      }
+    }
+
+    function getCatCollisionRect(): CollisionRect {
+      const { width, height } = getCatRenderSize()
+      return {
+        left: state.catX + width * CAT_HITBOX.left,
+        right: state.catX + width * CAT_HITBOX.right,
+        bottom: height * CAT_HITBOX.bottom,
+        top: height * CAT_HITBOX.top,
+      }
+    }
+
+    function isRectOverlap(a: CollisionRect, b: CollisionRect) {
+      return (
+        a.left < b.right &&
+        a.right > b.left &&
+        a.bottom < b.top &&
+        a.top > b.bottom
+      )
+    }
+
+    function triggerGameOver() {
+      state.gameOver = true
+      state.speed = 0
+      state.vy = 0
+      state.isHolding = false
+      state.runHeld = false
+      state.brakeHeld = false
+      state.jumpHeld = false
+      pointerDown = false
+    }
+
+    function checkCatCollision() {
+      if (!state.catActive || state.gameOver) return false
+      const collided = isRectOverlap(getTrainCollisionRect(), getCatCollisionRect())
+      if (collided) triggerGameOver()
+      return collided
+    }
 
     const segCount = computed(() => {
       const need = Math.ceil((viewportW.value + TRACK_BUFFER * 2) / TRACK_SEG_W) + 2
@@ -384,6 +483,7 @@ export default {
     // --- Pointer 操作（ドラッグ/フリック） ---
     let pointerDown = false
     function onPointerDown(e: PointerEvent | TouchEvent) {
+      if (state.gameOver) return
       pointerDown = true
       state.isHolding = true
       state.pressTs = performance.now()
@@ -395,6 +495,7 @@ export default {
     }
 
     function onPointerMove(e: PointerEvent | TouchEvent) {
+      if (state.gameOver) return
       if (!pointerDown) return
       const x = (e as PointerEvent).clientX ?? (e as TouchEvent).touches?.[0]?.clientX ?? 0
       const y = (e as PointerEvent).clientY ?? (e as TouchEvent).touches?.[0]?.clientY ?? 0
@@ -409,6 +510,11 @@ export default {
     }
 
     function onPointerUp() {
+      if (state.gameOver) {
+        pointerDown = false
+        state.isHolding = false
+        return
+      }
       if (!pointerDown) return
       pointerDown = false
       state.isHolding = false
@@ -424,11 +530,18 @@ export default {
     }
 
     // --- ボタン操作 ---
-    function onRunDown()   { state.runHeld = true }
+    function onRunDown()   {
+      if (state.gameOver) return
+      state.runHeld = true
+    }
     function onRunUp()     { state.runHeld = false }
-    function onBrakeDown() { state.brakeHeld = true }
+    function onBrakeDown() {
+      if (state.gameOver) return
+      state.brakeHeld = true
+    }
     function onBrakeUp()   { state.brakeHeld = false }
     function onJumpPress() {
+      if (state.gameOver) return
       if (state.jumpHeld) return
       state.jumpHeld = true
       tryJump()
@@ -437,6 +550,7 @@ export default {
     function onJumpRelease() { state.jumpHeld = false }
     // 駅タップで停車（簡易減速演出）
     function onStationTap(index: number) {
+      if (state.gameOver) return
       const st = state.stations[index]
       const start = performance.now()
       const duration = 120
@@ -444,6 +558,7 @@ export default {
       const initialSpeed = state.speed
       const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
       const anim = () => {
+        if (state.gameOver) return
         const t = Math.min(1, (performance.now() - start) / duration)
         const k = easeOut(t)
         state.trainX = startX + (st.x - startX) * k
@@ -468,6 +583,44 @@ export default {
           setTimeout(() => (state.arrivedFlash = false), 800)
         }
       }
+    }
+
+    function resetGameState() {
+      pointerDown = false
+      state.isHolding = false
+      state.pressTs = 0
+      state.startX = 0
+      state.startY = 0
+      state.lastX = 0
+      state.lastY = 0
+
+      state.trainX = 0
+      state.speed = 0
+      state.trainY = 0
+      state.vy = 0
+      state.onGround = true
+      state.cameraX = 0
+
+      state.arrivedFlash = false
+      state.catActive = false
+      state.catX = 0
+      state.catSpeed = 0
+      state.gameOver = false
+      state.runHeld = false
+      state.brakeHeld = false
+      state.jumpHeld = false
+
+      initStations()
+      initTrackSegs()
+      randomizeScenery()
+      resetCatSpawnTimer()
+    }
+
+    function restartGame() {
+      cancelAnimationFrame(raf)
+      lastT = performance.now()
+      resetGameState()
+      raf = requestAnimationFrame(tick)
     }
 
     function resetCatSpawnTimer() {
@@ -500,6 +653,8 @@ export default {
     let raf = 0
     let lastT = performance.now()
     const tick = () => {
+      if (state.gameOver) return
+
       const now = performance.now()
       let dt = (now - lastT) / 1000
       lastT = now
@@ -532,6 +687,7 @@ export default {
       state.cameraX += (desired - state.cameraX) * 0.1
 
       updateCat(dt)
+      if (checkCatCollision()) return
       checkArrival()
       recycleStations()
       recycleScenery()
@@ -571,6 +727,7 @@ export default {
       onRunDown, onRunUp, onBrakeDown, onBrakeUp,
       onJumpPress, onJumpRelease,
       toggleTrainImage,
+      restartGame,
       currentTrainImg,
       anchorPx,
       trainImg,
@@ -592,7 +749,7 @@ export default {
 .game {
   position: relative;
   width: 100%;
-  height: 70dvh;
+  height: 100vh;
   overflow: hidden;
   background:
     radial-gradient(110% 70% at 50% 0%, #fff4cc 0%, #d6ebff 45%, #b7dbff 100%);
@@ -645,6 +802,7 @@ export default {
     calc(var(--bg-near-x, 0px) * -1.35) calc(100% - 22%);
 }
 
+
 .track {
   position: absolute;
   inset: 0;
@@ -688,7 +846,7 @@ export default {
 }
 
 .scenery-amusementPark {
-  bottom: calc(var(--track-bottom) + var(--track-height) - 16%);
+  bottom: calc(var(--track-bottom) + var(--track-height) - 12%);
 }
 
 .station {
@@ -1119,6 +1277,45 @@ export default {
   padding-left: 1%;
 }
 
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(10, 18, 30, 0.52);
+  backdrop-filter: blur(6px);
+}
+
+.game-over-card {
+  width: min(92vw, 360px);
+  padding: 22px 20px 18px;
+  border-radius: 18px;
+  background: rgba(255, 250, 244, 0.95);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.game-over-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #d35400;
+}
+
+.game-over-title {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 30px);
+  color: #1f2937;
+}
+
+.game-over-text {
+  margin: 10px 0 0;
+  color: #4b5563;
+}
+
 .hud {
   position: absolute;
   left: 23%;
@@ -1166,7 +1363,20 @@ export default {
 .controls .btn.run   { background: #4caf50cc; color: #fff; }
 .controls .btn.brake { background: #f44336cc; color: #fff; }
 .controls .btn.jump  { grid-column: span 2; background: #2196f3cc; color: #fff; }
+.controls .btn:disabled {
+  opacity: 0.55;
+}
 
+.game-over-card .btn.restart {
+  min-width: 180px;
+  min-height: 44px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 999px;
+  font-weight: 800;
+  background: linear-gradient(180deg, #ff9b4a, #ff6b2f);
+  color: #fff;
+}
 /* 画面が狭い時は右側を横並びにする */
 @media (max-width: 480px){
   .controls-right{

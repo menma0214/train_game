@@ -8,7 +8,7 @@
 
     <div class="modal">
       <p class="modal-desc">「あそぶ」をゲームスタート！</p>
-      <button class="btn-primary" type="button" @click="goPlay">ゲームスタート！</button>
+      <button class="btn-primary" type="button" @click="goPlay">あそぶ！</button>
     </div>
   </div>
 </template>
@@ -27,8 +27,10 @@ function goPlay() {
 <style>
   .title-root{
     position: fixed;
+    background-image: url("src/assets/top_pre_bg_image.png");
+    background-size: cover;
     inset: 0;
-    width: 100vh;
+    width: 100%;
     height: 100svh;
     overflow: hidden;
     padding: env(safe-area-inset-top)
@@ -54,7 +56,7 @@ function goPlay() {
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  color: #fff;
+  color: #000;
   text-shadow: 0 2px 12px rgba(0,0,0,.45);
   }
 
@@ -74,7 +76,9 @@ function goPlay() {
     -webkit-backdrop-filter: blur(12px) saturate(1.05);
     text-align: center;
   }
-  .modal-desc{ margin: 0 0 12px; }
+  .modal-desc{
+    margin: 0 0 12px; 
+    color: #000;}
 
   .btn-primary{
     min-width: 180px;
