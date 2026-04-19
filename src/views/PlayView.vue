@@ -1307,7 +1307,7 @@ export default {
 
 .game-over-title {
   margin: 0;
-  font-size: clamp(24px, 5vw, 30px);
+  font-size: clamp(24px, 5vw, 24px);
   color: #1f2937;
 }
 
