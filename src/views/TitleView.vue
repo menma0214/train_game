@@ -8,7 +8,7 @@
     </header>
 
     <div class="modal">
-      <p class="modal-desc">「あそぶ」をゲームスタート！</p>
+      <p class="modal-desc"><span style="color: blue; font-weight: bold;">画面を横にしてから</span>「あそぶ!」を押して<br>ゲームスタート！</p>
       <button
         class="btn-primary"
         type="button"
@@ -75,6 +75,8 @@ async function goPlay() {
     background-size: cover;
     inset: 0;
     width: 100%;
+    height: 100vh;
+    height: 100dvh;
     height: 100svh;
     overflow: hidden;
     padding: env(safe-area-inset-top)
