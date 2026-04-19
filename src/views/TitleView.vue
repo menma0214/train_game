@@ -1,3 +1,4 @@
+<!-- 背景にデモ動画を実装予定 -->
 <template>
   <div class="title-root">
     <video class="bg-video" :src="demoSrc" autoplay muted loop playsinline preload="auto"></video>
@@ -8,19 +9,62 @@
 
     <div class="modal">
       <p class="modal-desc">「あそぶ」をゲームスタート！</p>
-      <button class="btn-primary" type="button" @click="goPlay">あそぶ！</button>
+      <button
+        class="btn-primary"
+        type="button"
+        :disabled="isStarting"
+        @click="goPlay"
+        >
+        {{ isStarting ? '読み込み中...' : 'あそぶ！' }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import demoSrc from '@/assets/train.png' // 動画を用意していないため画像で仮配置
 
-const router = useRouter()
+type FsElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void
+}
 
-function goPlay() {
-  router.push('/play')
+type FsDocument = Document & {
+  webkitFullscreenElement?: Element | null
+}
+
+const router = useRouter()
+const isStarting = ref(false)
+
+async function enterFullscreenOnStart() {
+  const doc = document as FsDocument
+  const root = document.documentElement as FsElement
+
+  if (doc.fullscreenElement || doc.webkitFullscreenElement) return
+
+  if (root.requestFullscreen) {
+    await root.requestFullscreen()
+    return
+  }
+
+  if (root.webkitRequestFullscreen) {
+    await root.webkitRequestFullscreen()
+  }
+}
+
+async function goPlay() {
+  if (isStarting.value) return
+  isStarting.value = true
+
+  try {
+    await enterFullscreenOnStart()
+  } catch (error) {
+    console.warn('全画面表示にできませんでした。', error)
+  }finally {
+    await router.push('/play')
+    isStarting.value = false
+  }
 }
 </script>
 
@@ -68,9 +112,11 @@ function goPlay() {
     top: 50%;
     transform: translate(-50%,-50%);
     width: min(92vw, 520px);
-    padding: 20px 24px; color: #fff;
+    padding: 20px 24px;
+    color: #fff;
     background: color-mix(in oklab, white 18%, transparent);
-    border: 1px solid rgba(255,255,255,.35); border-radius: 16px;
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: 16px;
     box-shadow: 0 10px 40px rgba(0,0,0,.35);
     backdrop-filter: blur(12px) saturate(1.05);
     -webkit-backdrop-filter: blur(12px) saturate(1.05);
@@ -93,6 +139,7 @@ function goPlay() {
     background: linear-gradient(180deg, #82ffa8, #39e07a);
     box-shadow: 0 10px 20px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.6);
   }
-  
+
   .btn-primary:active{ transform: translateY(1px) scale(.98); }
+  .btn-primary:disabled{ opacity: .7; cursor: default; }
 </style>
