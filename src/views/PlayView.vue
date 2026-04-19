@@ -750,11 +750,17 @@ export default {
   position: relative;
   width: 100%;
   height: 100vh;
+  height: 100svh;
+  height: 100dvh;
   overflow: hidden;
   background:
     radial-gradient(110% 70% at 50% 0%, #fff4cc 0%, #d6ebff 45%, #b7dbff 100%);
   user-select: none;
   touch-action: none;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
   --track-bottom: 20%;
   --track-height: 10px;
 }
@@ -1283,7 +1289,11 @@ export default {
   z-index: 30;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding:
+    calc(var(--safe-top) + 20px)
+    calc(var(--safe-right) + 20px)
+    calc(var(--safe-bottom) + 20px)
+    calc(var(--safe-left) + 20px);
   background: rgba(10, 18, 30, 0.52);
   backdrop-filter: blur(6px);
 }
@@ -1307,7 +1317,7 @@ export default {
 
 .game-over-title {
   margin: 0;
-  font-size: clamp(24px, 5vw, 24px);
+  font-size: clamp(20px, 5vw, 20px);
   color: #1f2937;
 }
 
@@ -1318,9 +1328,10 @@ export default {
 
 .hud {
   position: absolute;
-  left: 23%;
-  top: 3%;
-  background: #0008; color: #fff;
+  left: calc(var(--safe-left) + 12px);
+  top: calc(var(--safe-top) + 12px);
+  background: #0008;
+  color: #fff;
   font-size: 12px;
   padding: 6px 8px;
   border-radius: 6px;
@@ -1330,9 +1341,9 @@ export default {
 /* ボタン */
 .controls{
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 4px;
+  left: calc(var(--safe-left) + 12px);
+  right: calc(var(--safe-right) + 12px);
+  bottom: calc(var(--safe-bottom) + 8px);
   display: flex;
   justify-content: space-around;
   align-items: flex-end;
