@@ -208,7 +208,7 @@ const CAT_ASPECT_RATIO = 1.15
 
 // 当たり判定
 const TRAIN_HITBOX = { left: 0.18, right: 0.78, bottom: 0.05, top: 0.28}
-const CAT_HITBOX = {left: 0.18, right: 0.74, bottom: 0.02, top: 0.34 }
+const CAT_HITBOX = {left: 0.10, right: 0.92, bottom: 0.00, top: 0.72 }
 type SceneryType = 'house' | 'mall' | 'colton' | 'amusementPark'
 type SceneryItem = { id: number; type: SceneryType; x: number; width: number }
 type CollisionRect = { left: number; right: number; bottom: number; top: number; }

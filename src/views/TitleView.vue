@@ -1,6 +1,8 @@
 <!-- 背景にデモ動画を実装予定 -->
 <template>
-  <div class="title-root">
+  <div
+    class="title-root"
+    :style="{ backgroundImage: `url(${titleBgImg})` }">
     <video class="bg-video" :src="demoSrc" autoplay muted loop playsinline preload="auto"></video>
 
     <header class="hero">
@@ -25,6 +27,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import demoSrc from '@/assets/train.png' // 動画を用意していないため画像で仮配置
+import titleBgImg from '@/assets/top_pre_bg_image.png'
 
 type FsElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void
@@ -71,8 +74,9 @@ async function goPlay() {
 <style>
   .title-root{
     position: fixed;
-    background-image: url("src/assets/top_pre_bg_image.png");
     background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     inset: 0;
     width: 100%;
     height: 100vh;
