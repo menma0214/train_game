@@ -200,12 +200,9 @@ const CAT_SPEED_MIN = 120
 const CAT_SPEED_MAX = 180
 const CAT_SPAWN_MARGIN = 140
 const CAT_DESPAWN_MARGIN = 220
-const TRAIN_RENDER_MIN_W = 120
-const TRAIN_RENDER_MAX_W = 220
-const TRAIN_RENDER_RATIO = 0.15
-const CAT_RENDER_MIN_W = 128
-const CAT_RENDER_MAX_W = 188
-const CAT_RENDER_RATIO = 0.16
+const CHARACTER_RENDER_MIN_W = 120
+const CHARACTER_RENDER_MAX_W = 220
+const CHARACTER_RENDER_RATIO = 0.15
 const CAT_ASPECT_RATIO = 1.15
 
 
@@ -293,21 +290,20 @@ export default {
 
     const clampValue = (value: number, min: number, max: number) =>
       Math.min(max, Math.max(min, value))
-    const getTrainRenderSize = () => {
-      const width = clampValue(
-         viewportW.value * TRAIN_RENDER_RATIO,
-         TRAIN_RENDER_MIN_W,
-         TRAIN_RENDER_MAX_W
+    const getCharacterRenderWidth = () =>
+      clampValue(
+        viewportW.value * CHARACTER_RENDER_RATIO,
+        CHARACTER_RENDER_MIN_W,
+        CHARACTER_RENDER_MAX_W
       )
+
+    const getTrainRenderSize = () => {
+      const width = getCharacterRenderWidth()
       return { width, height: width }
     }
 
     const getCatRenderSize = () => {
-      const width = clampValue(
-        viewportW.value * CAT_RENDER_RATIO,
-        CAT_RENDER_MIN_W,
-        CAT_RENDER_MAX_W
-      )
+      const width = getCharacterRenderWidth()
       return { width, height: width / CAT_ASPECT_RATIO }
     }
 
@@ -763,6 +759,7 @@ export default {
   --safe-left: env(safe-area-inset-left, 0px);
   --track-bottom: 20%;
   --track-height: 10px;
+  --character-width: clamp(120px, 15vw, 220px);
 }
 
 .game::before,
@@ -891,7 +888,7 @@ export default {
 .train-image {
   display:block;
   /* 端末に合わせてほどよく可変。 */
-  width: clamp(120px, 15vw, 220px);
+  width: var(--character-width);
   height:auto;
   pointer-events:none;
 }
@@ -917,7 +914,7 @@ export default {
   position: absolute;
   left: 0;
   bottom: calc(var(--track-bottom) + var(--track-height));
-  width: clamp(128px, 16vw, 188px);
+  width: var(--character-width);
   aspect-ratio: 1.15;
   z-index: 5;
   pointer-events: none;
