@@ -797,12 +797,12 @@ export default {
       #8bb26c 0 26px,
       #95bd72 26px 52px,
       #7fa45f 52px 78px
-    ) 0 100% / 420px 22% repeat-x,
-    repeating-linear-gradient(
+    ) 0 100% / 420px 22% repeat-x;
+    /* repeating-linear-gradient(
       to right,
       #c18f52 0 10px,
       #b47f48 10px 20px
-    ) 0 calc(100% - 22%) / 120px 6% repeat-x;
+    ) 0 calc(100% - 22%) / 120px 6% repeat-x; */
   background-position:
     calc(var(--bg-near-x, 0px) * -1) 100%,
     calc(var(--bg-near-x, 0px) * -1.35) calc(100% - 22%);
@@ -848,7 +848,7 @@ export default {
 }
 
 .scenery-colton {
-  bottom: calc(var(--track-bottom) + var(--track-height) - 1%);
+  bottom: calc(var(--track-bottom) + var(--track-height) - 3%);
 }
 
 .scenery-amusementPark {
