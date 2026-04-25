@@ -924,7 +924,7 @@ export default {
 .cat,
 .cat * {
   box-sizing: border-box;
-  width: 8%;
+  /* width: 8%; */
 }
 
 .cat-figure {
